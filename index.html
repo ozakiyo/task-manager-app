@@ -110,7 +110,7 @@ const filtered = tasks.filter(task => {
   }
   input[type="text"],
   input[type="date"],
-  selct{
+  select{
     flex:1;
     padding:8px;
     border:1px solid #CCC;
@@ -214,6 +214,17 @@ const filtered = tasks.filter(task => {
     display:flex;
     margin:10px 0 20px 0;
   }
+  /*編集モード用フォーム*/
+  li.editing{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+  }
+  li.editing input,
+  li.editing select{
+    width:100%;
+    box-sizing:border-box;
+  }
 
 </style>
 </head>
@@ -255,12 +266,16 @@ const filtered = tasks.filter(task => {
 
     <div class="input-area">
       <input type="text" id="taskInput" placeholder="タスクを入力">
+      <!--詳細説明-->
+      <input type="text" id="descInput" placeholder="詳細説明(任意)">
       <input type="date" id="dueDateInput">
+      <!--優先度色分け表示-->
       <select id="prioritySelector">
         <option value="high">高</option>
         <option value="medium" selected>中</option>
         <option value="low">低</option>
       </select>
+      <!--カテゴリ追加欄-->
       <select id="categorySelector"></select>
       <button id="addBtn">追加</button>
     </div>
@@ -279,8 +294,11 @@ const filtered = tasks.filter(task => {
 
     <ul id="taskList"></ul>
   </div>
+
     <script>
       const taskInput = document.getElementById("taskInput");
+       /*詳細説明*/
+      const descInput = document.getElementById("descInput");
       const addBtn = document.getElementById("addBtn");
       const taskList = document.getElementById("taskList");
       /*優先度色分け表示*/
@@ -303,35 +321,42 @@ const filtered = tasks.filter(task => {
       const filterCategory = document.getElementById("filterCategory");
       /*ソート機能*/
       const sortSelector = document.getElementById("sortSelector");
+     
 
       //---LocalStrageからデータ読み込み---
       let data = JSON.parse(localStorage.getItem("key")) || [];
       let categories = JSON.parse(localStorage.getItem("categories")) || ["仕事","プライベート","その他"];
 
+      let editIndex = null; //編集中のインデックスを保持
+
       //---カテゴリ表示更新---
       function renderCategories(){
         categorySelector.innerHTML = "";
         filterCategory.innerHTML = '<option value="all">全カテゴリ</option>';
+        deleteCategorySelector.innerHTML = "";
         for(let i=0;i<categories.length;i++){
-          const categorie = categories[i];
+          const category = categories[i];
 
           //タスク追加用カテゴリ選択欄
           const opt1 = document.createElement("option");
-          opt1.value = categorie;
-          opt1.textContent = categorie;
+          opt1.value = category;
+          opt1.textContent = category;
           categorySelector.appendChild(opt1);
 
           //フィルタ選択用カテゴリ選択欄
           const opt2 = document.createElement("option");
-          opt2.value = categorie;
-          opt2.textContent = categorie;
+          opt2.value = category;
+          opt2.textContent = category;
           filterCategory.appendChild(opt2);
 
           //カテゴリ削除
           const opt3 = document.createElement("option");
-          opt3.value = categorie;
-          opt3.textContent = categorie;
+          opt3.value = category;
+          opt3.textContent = category;
           deleteCategorySelector.appendChild(opt3);
+        }
+        if(categories.length>0){
+          categorySelector.value = categories[0];
         }
       }
 
@@ -372,7 +397,8 @@ const filtered = tasks.filter(task => {
 
         renderCategories();
         renderTasks();
-      })
+        deleteCategorySelector.value = "";
+      });
 
       //---タスク一覧の表示---
       function renderTasks(){
@@ -405,7 +431,6 @@ const filtered = tasks.filter(task => {
           sortedData.sort((a,b)=>order[a.priority]-order[b.priority]);
         }
 
-
         for(let index=0;index<sortedData.length;index++){
           const task = sortedData[index];
 
@@ -429,8 +454,6 @@ const filtered = tasks.filter(task => {
           }
 
           const li = document.createElement("li");
-
-          if(task.dueDate)
           
           //---完了状態---
           if(task.completed){
@@ -448,20 +471,36 @@ const filtered = tasks.filter(task => {
             }
           }
 
+          //ソート後のタスク(task)に対応する、元の data 配列での位置を探す
+          let originalIndex = -1;
+          for(let i=0;i<data.length;i++){
+            if(data[i].id === task.id){
+              originalIndex = i;
+              break;
+            }
+          }
+
           //---チェックボックス作成---
           const checkbox = document.createElement("input");
           checkbox.type = "checkbox";
           checkbox.checked = task.completed;
           checkbox.addEventListener("change", function(){
-            toggleTask(index);
+            toggleTask(originalIndex);
           });
 
           //---テキスト---
           const span = document.createElement("span");
           span.textContent = task.text;
           span.addEventListener("click", function(){
-            toggleTask(index);
+            toggleTask(originalIndex);
           });
+
+          //---詳細説明---
+          const descSpan = document.createElement("div");
+          descSpan.textContent = task.description || "";
+          descSpan.style.fontSize = "12px";
+          descSpan.style.color = "#555";
+          descSpan.style.marginLeft = "25px";
 
           //---カテゴリ表示---
           const catSpan = document.createElement("span");
@@ -483,22 +522,24 @@ const filtered = tasks.filter(task => {
           const editBtn = document.createElement("button");
           editBtn.textContent = "編集";
           editBtn.addEventListener("click", function(){
-            editTask(index);
+            editTask(originalIndex,li);
           });
 
           //---削除ボタン---
           const delBtn = document.createElement("button");
           delBtn.textContent = "削除";
           delBtn.addEventListener("click", function(){
-            deleteTask(index);
+            deleteTask(originalIndex);
           });
 
-          buttonArea.appendChild(editBtn);
+          buttonArea.appendChild(editBtn); //詳細説明編集ボタン
           buttonArea.appendChild(delBtn);
 
           //---チェックボックスを左に配置---
           li.appendChild(checkbox);
           li.appendChild(span);
+          /*詳細説明*/
+          li.appendChild(descSpan);
           /*カテゴリ表示*/
           li.appendChild(catSpan);
           /*期限表示*/
@@ -516,6 +557,8 @@ const filtered = tasks.filter(task => {
       //---タスク追加---
       addBtn.addEventListener("click", function(){
         const text = taskInput.value.trim();
+        /*詳細説明*/
+        const description = descInput.value.trim();
         /*優先度色分け表示*/
         const priority = prioritySelector.value;
         /*入力された期限を取得*/
@@ -525,15 +568,28 @@ const filtered = tasks.filter(task => {
         if(text === ""){
           return;
         }
-        data.push({
-          text, 
-          completed: false, 
-          priority, 
-          dueDate, 
-          category,
-          createdAt: new Date().toISOString()
-        });/*priority 優先度色分け表示, dueDate 期限表示,category カテゴリ追加,createdAt 作成日時*/
+        if(editIndex === null){
+          data.push({
+            id: Date.now(), //一意のID
+            text, 
+            description: description || "", //詳細説明
+            completed: false, 
+            priority, 
+            dueDate, 
+            category,
+            createdAt: new Date().toISOString()
+          });/*priority 優先度色分け表示, dueDate 期限表示,category カテゴリ追加,createdAt 作成日時*/
+        }else{
+          data[editIndex].text = text;
+          data[editIndex].description = description;
+          data[editIndex].dueDate = dueDate;
+          data[editIndex].category = category;
+          editIndex = null;
+          addBtn.textContent = "追加";
+
+        }
         taskInput.value = "";
+        descInput.value = "";//クリア
         dueDateInput.value = ""; //期限入力もリセット
         saveTasks();
         renderTasks();
@@ -547,21 +603,92 @@ const filtered = tasks.filter(task => {
       }
 
       //---タスク編集---
-      function editTask(index){
-        const li = taskList.children[index];
-        const oldText = data[index].text;
+      function editTask(index,li){
+        const task = data[index];
+
+        //編集モード
+        li.classList.add("editing");
+        li.innerHTML = "";
 
         //---編集モード表示---
         li.innerHTML = "";
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = oldText;
-        input.className = "edit-input";
+        const textInput = document.createElement("input");
+        textInput.type = "text";
+        textInput.value = task.text;
+        textInput.className = "edit-input";
+        textInput.placeholder = "タスク名";
 
+        //---詳細説明---
+        const descInput = document.createElement("input");
+        descInput.type = "text";
+        descInput.value = task.description || "";
+        descInput.className = "edit-input";
+        descInput.placeholder = "詳細説明";
+
+        //---期限---
+        const dueInput = document.createElement("input");
+        dueInput.type = "date";
+        dueInput.value = task.dueDate || "";
+
+        //---優先度---
+        const prioritySelect = document.createElement("select");
+        const priorities = ["high","medium","low"];
+        for(let i=0;i<priorities.length;i++){
+          const p = priorities[i];
+          const opt = document.createElement("option");
+          if(p === "high"){
+            opt.textContent = "高";
+          }else if(p === "medium"){
+            opt.textContent = "中";
+          }else{
+            opt.textContent = "低";
+          }
+
+          //値を設定
+          opt.value = p;
+
+          //現在のタスクの優先度と一致していれば選択状態に
+          if(p===task.priority){
+            opt.selected = true;
+          }
+
+          //selectに追加
+          prioritySelect.appendChild(opt);
+        }
+        
+        //---カテゴリ---
+        const categorySelect = document.createElement("select");
+        for(let i=00;i<categories.length;i++){
+          const cat = categories[i];
+          const opt = document.createElement("option");
+
+          //値と表示文字を設定
+          opt.value = cat;
+          opt.textContent = cat;
+
+          //現在のカテゴリと一致していれば選択状態に
+          if(cat === task.category){
+            opt.selected = true;
+          }
+
+          //selectに追加
+          categorySelect.appendChild(opt);
+        }
+
+        //保存ボタン
         const saveBtn = document.createElement("button");
         saveBtn.textContent = "保存";
         saveBtn.addEventListener("click", function(){
-          data[index].text = input.value.trim() || oldText;
+          const newText = textInput.value.trim();
+          if(newText === ""){
+            alert("タスク名を入力してください");
+            return;
+          }
+          data[index].text = newText;
+          data[index].description = descInput.value;
+          data[index].dueDate = dueInput.value;
+          data[index].priority = prioritySelect.value;
+          data[index].category = categorySelect.value;
           saveTasks();
           renderTasks();
         });
@@ -572,7 +699,12 @@ const filtered = tasks.filter(task => {
           renderTasks();
         });
 
-        li.appendChild(input);
+        //---編集フォームを構築---
+        li.appendChild(textInput);
+        li.appendChild(descInput);
+        li.appendChild(dueInput);
+        li.appendChild(prioritySelect);
+        li.appendChild(categorySelect);
         li.appendChild(saveBtn);
         li.appendChild(cancelBtn);
       }
@@ -587,11 +719,9 @@ const filtered = tasks.filter(task => {
       //---検索イベント---
       searchInput.addEventListener("input", renderTasks);
       searchClearBtn.addEventListener("click", function(){
-        searchClearBtn.addEventListener("click", function(){
-          searchInput.value = "";
-          renderTasks();
-        });
-      })
+        searchInput.value = "";
+        renderTasks();
+      });
 
       //---フィルター変更イベント---
       filterStatus.addEventListener("change", renderTasks);
